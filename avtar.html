@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chatbot UI</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-100 text-black h-screen flex items-center justify-center transition-colors">
+  <div class="w-[80%] bg-white rounded-lg shadow-lg flex flex-col h-[90vh] overflow-hidden">
+    
+    <!-- Header -->
+    <div class="bg-blue-600 text-white p-4 rounded-t-lg text-lg font-semibold flex justify-between items-center">
+      <span>Chatbot</span>
+      <div class="flex gap-2 items-center">
+        <button onclick="clearChat()" class="bg-red-500 hover:bg-red-600 text-white text-sm px-3 py-1 rounded">Clear</button>
+      </div>
+    </div>
+
+    <!-- Chat Window -->
+    <div id="chatWindow" class="flex-1 overflow-y-auto p-4 space-y-4"></div>
+
+    <!-- Typing Indicator -->
+    <div id="typingIndicator" class="px-4 text-sm italic text-gray-500 hidden">Bot is typing...</div>
+
+    <!-- Input Box -->
+    <div class="p-4 border-t border-gray-300 flex gap-2">
+      <input
+        type="text"
+        id="userInput"
+        placeholder="Type a message..."
+        class="flex-1 border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring focus:ring-blue-200"
+        onkeydown="handleKey(event)"
+      />
+      <button
+        onclick="sendMessage()"
+        class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
+      >
+        Send
+      </button>
+    </div>
+  </div>
+
+  <!-- Inside your existing script tag -->
+<script>
+  const chatWindow = document.getElementById('chatWindow');
+  const input = document.getElementById('userInput');
+  const typingIndicator = document.getElementById('typingIndicator');
+
+  let currentBotMessageElement = null;
+  let currentBotMessage = '';
+
+  function formatTime() {
+    const now = new Date();
+    return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function createAvatar(isUser) {
+    const avatar = document.createElement('img');
+    avatar.className = 'w-8 h-8 rounded-full';
+    avatar.src = isUser
+      ? 'https://cdn-icons-png.flaticon.com/512/1946/1946429.png'
+      : 'https://cdn-icons-png.flaticon.com/512/4712/4712100.png';
+    avatar.alt = isUser ? 'User' : 'Bot';
+    return avatar;
+  }
+
+  function appendMessage(text, isUser) {
+    const wrapper = document.createElement('div');
+    wrapper.className = isUser ? 'flex justify-end' : 'flex justify-start';
+
+    const avatar = createAvatar(isUser);
+
+    const bubble = document.createElement('div');
+    bubble.className = `ml-2 p-3 rounded-lg max-w-xs ${
+      isUser
+        ? 'bg-blue-500 text-white'
+        : 'bg-gray-200 dark:bg-gray-700 dark:text-white text-black'
+    }`;
+    bubble.innerHTML = `${text}<div class="text-xs mt-1 opacity-70 text-right">${formatTime()}</div>`;
+
+    const container = document.createElement('div');
+    container.className = 'flex items-start space-x-2';
+    if (isUser) {
+      container.appendChild(bubble);
+      container.appendChild(avatar);
+    } else {
+      container.appendChild(avatar);
+      container.appendChild(bubble);
+    }
+
+    wrapper.appendChild(container);
+    chatWindow.appendChild(wrapper);
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+  }
+
+  function createBotMessageBubble() {
+    currentBotMessageElement = document.createElement('div');
+    currentBotMessageElement.className = 'flex justify-start w-full';
+
+    const avatar = createAvatar(false);
+
+    const bubble = document.createElement('div');
+    bubble.className = `ml-2 p-3 rounded-lg w-full bg-gray-200 dark:bg-gray-700 dark:text-white text-black`;
+    bubble.innerHTML = `${currentBotMessage}<div class="text-xs mt-1 opacity-70 text-right">${formatTime()}</div>`;
+
+    const container = document.createElement('div');
+    container.className = 'flex items-start space-x-2';
+    container.appendChild(avatar);
+    container.appendChild(bubble);
+
+    currentBotMessageElement.appendChild(container);
+    chatWindow.appendChild(currentBotMessageElement);
+  }
+
+  function appendToBotMessage(newText) {
+    currentBotMessage += newText;
+    currentBotMessageElement.querySelector('div.w-full').innerHTML = `${currentBotMessage}<div class="text-xs mt-1 opacity-70 text-right">${formatTime()}</div>`;
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+  }
+
+  function handleKey(e) {
+    if (e.key === 'Enter') {
+      sendMessage();
+    }
+  }
+
+  function sendMessage() {
+    const message = input.value.trim();
+    if (!message) return;
+
+    appendMessage(message, true);
+    input.value = '';
+    input.focus();
+
+    typingIndicator.classList.remove('hidden');
+
+    createBotMessageBubble();
+    appendToBotMessage(message);
+
+    fetch('/api/chat', {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    })
+    .then(response => {
+      if (response.ok) {
+        createBotMessageBubble();
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+
+        function readStream() {
+          reader.read().then(({ done, value }) => {
+            if (done) {
+              typingIndicator.classList.add('hidden');
+              return;
+            }
+
+            const chunk = decoder.decode(value, { stream: true });
+            const messages = chunk.split('\n');
+
+            messages.forEach(msg => {
+              if (msg.trim().startsWith("data:")) {
+                const data = msg.substring(5).trim();
+                if (data) {
+                  appendToBotMessage(data);
+                }
+              }
+            });
+
+            readStream();
+          }).catch(error => {
+            console.error("Stream read error:", error);
+            typingIndicator.classList.add('hidden');
+            appendMessage("⚠️ Error receiving data", false);
+          });
+        }
+
+        readStream();
+      }
+    })
+    .catch(error => {
+      console.error('Error sending message:', error);
+    });
+  }
+
+  function clearChat() {
+    chatWindow.innerHTML = '';
+    fetch('/api/chat/clear', { method: 'POST' });
+  }
+
+  function toggleDarkMode() {
+    document.documentElement.classList.toggle('dark');
+  }
+</script>
+
+</body>
+</html>
