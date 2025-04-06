@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chatbot UI</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-50 text-gray-900 h-screen flex items-center justify-center transition-colors">
+  <div class="w-[70%] bg-white rounded-xl shadow-lg flex flex-col h-[90vh] overflow-hidden border border-gray-200">
+    
+    <!-- Header -->
+    <div class="bg-gradient-to-r from-indigo-600 to-indigo-800 text-white p-4 rounded-t-xl text-lg font-semibold flex justify-between items-center shadow-md">
+      <span>Chatbot</span>
+      <button onclick="clearChat()" class="bg-red-500 hover:bg-red-600 text-white text-sm px-3 py-1 rounded focus:outline-none focus:ring-2 focus:ring-red-500">Clear</button>
+    </div>
+
+    <!-- Chat Window -->
+    <div id="chatWindow" class="flex-1 overflow-y-auto p-6 space-y-4 bg-gray-50 rounded-lg shadow-inner border-t border-gray-200"></div>
+
+    <!-- Typing Indicator -->
+    <div id="typingIndicator" class="px-6 text-sm italic text-gray-500 hidden">Bot is typing...</div>
+
+    <!-- Input Box -->
+    <div class="p-6 border-t border-gray-300 flex gap-4 bg-gradient-to-t from-white to-gray-50">
+      <input
+        type="text"
+        id="userInput"
+        placeholder="Type a message..."
+        class="flex-1 border border-gray-300 rounded-lg px-4 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-opacity-50"
+        onkeydown="handleKey(event)"
+      />
+      <button
+        onclick="sendMessage()"
+        class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300">
+        Send
+      </button>
+    </div>
+  </div>
+
+  <script>
+    const chatWindow = document.getElementById('chatWindow');
+    const input = document.getElementById('userInput');
+    const typingIndicator = document.getElementById('typingIndicator');
+
+    // Function to format time for message timestamps
+    function formatTime() {
+      const now = new Date();
+      return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    // Function to append message to the chat window with different backgrounds and icons
+    function appendMessage(text, isUser) {
+      const wrapper = document.createElement('div');
+      wrapper.className = isUser ? 'flex justify-end' : 'flex justify-start';
+
+      // User Avatar/Icon
+      const avatar = document.createElement('div');
+      avatar.className = 'w-8 h-8 bg-gradient-to-r from-indigo-500 to-indigo-700 rounded-full flex items-center justify-center text-white text-sm font-bold';
+      avatar.innerHTML = isUser ? 'U' : 'B'; // 'U' for user, 'B' for bot
+
+      // Message Bubble
+      const bubble = document.createElement('div');
+      bubble.className = `ml-2 p-3 rounded-lg max-w-xs ${
+        isUser
+          ? 'bg-indigo-600 text-white shadow-md' // User message: Indigo background
+          : 'bg-gray-200 text-black shadow-sm'    // Bot response: Light Gray background
+      }`;
+
+      bubble.innerHTML = `${text}<div class="text-xs mt-1 opacity-70 text-right">${formatTime()}</div>`;
+
+      // Message container to align avatar and bubble
+      const container = document.createElement('div');
+      container.className = 'flex items-start space-x-2';
+      if (isUser) {
+        container.appendChild(bubble);
+        container.appendChild(avatar);
+      } else {
+        container.appendChild(avatar);
+        container.appendChild(bubble);
+      }
+
+      wrapper.appendChild(container);
+      chatWindow.appendChild(wrapper);
+      chatWindow.scrollTop = chatWindow.scrollHeight;
+    }
+
+    // Handling the Enter key to send messages
+    function handleKey(e) {
+      if (e.key === 'Enter') {
+        sendMessage();
+      }
+    }
+
+    // Function to send message to the backend
+    function sendMessage() {
+      const message = input.value.trim();
+      if (!message) return;
+
+      appendMessage(message, true); // User's message
+      input.value = '';
+      input.focus();
+
+      typingIndicator.classList.remove('hidden');
+
+      // Send user message to backend via POST request
+      fetch('/api/chat', {
+        method: 'POST',
+        body: JSON.stringify({ message }),
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+      .then(response => {
+        if (response.ok) {
+          console.log('Message sent to backend');
+        }
+      })
+      .catch(error => {
+        console.error('Error sending message:', error);
+      });
+    }
+
+    // Function to clear the chat window
+    function clearChat() {
+      chatWindow.innerHTML = '';
+    }
+
+    // Listen for bot responses via SSE from the same endpoint
+    const eventSource = new EventSource('/api/chat');
+
+    eventSource.onmessage = function(event) {
+      typingIndicator.classList.add('hidden');
+      appendMessage(event.data, false);  // Append bot's response
+    };
+
+    eventSource.onerror = function() {
+      typingIndicator.classList.add('hidden');
+      appendMessage("⚠️ Lost connection to server", false);
+    };
+  </script>
+</body>
+</html>
