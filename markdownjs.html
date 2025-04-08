@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+  <textarea id="md" rows="10" cols="50">
+hi, hello ***how*** are You
+
+*Italic*, **bold**, and ***bold italic***
+
+- One
+- Two
+- Three
+
+1. First
+2. Second
+  </textarea>
+
+  <button onclick="convert()">Convert</button>
+  <div id="output"></div>
+
+  <script>
+    function convert() {
+      const input = document.getElementById('md').value;
+      const html = marked.parse(input);
+      document.getElementById('output').innerHTML = html;
+    }
+  </script>
+</body>
+</html>
