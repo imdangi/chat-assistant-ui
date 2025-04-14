@@ -1,0 +1,135 @@
+<dependency>
+    <groupId>com.azure</groupId>
+    <artifactId>azure-core</artifactId>
+    <version>1.49.0</version> <!-- or your compatible version -->
+</dependency>
+<dependency>
+    <groupId>com.squareup.okhttp3</groupId>
+    <artifactId>okhttp</artifactId>
+    <version>4.12.0</version>
+</dependency>
+
+
+package com.sample;
+
+import com.azure.core.http.HttpClient;
+import com.azure.core.http.HttpRequest;
+import com.azure.core.http.HttpResponse;
+import com.azure.core.util.FluxUtil;
+import okhttp3.*;
+
+import reactor.core.publisher.Mono;
+
+import java.io.IOException;
+import java.net.URL;
+import java.util.concurrent.TimeUnit;
+
+public class OkHttpAzureHttpClient implements HttpClient {
+
+    private final OkHttpClient okHttpClient;
+
+    public OkHttpAzureHttpClient(OkHttpClient okHttpClient) {
+        this.okHttpClient = okHttpClient;
+    }
+
+    @Override
+    public Mono<HttpResponse> send(HttpRequest request) {
+        return Mono.defer(() -> {
+            try {
+                RequestBody requestBody = null;
+                if (request.getBody() != null) {
+                    byte[] bodyBytes = FluxUtil.collectBytesInByteBufferStream(request.getBody()).block();
+                    requestBody = RequestBody.create(bodyBytes, MediaType.get("application/json"));
+                }
+
+                Request.Builder builder = new Request.Builder()
+                        .url(request.getUrl().toString())
+                        .method(request.getHttpMethod().toString(), requestBody);
+
+                request.getHeaders().forEach(header -> builder.addHeader(header.getName(), header.getValue()));
+
+                Call call = okHttpClient.newCall(builder.build());
+
+                return Mono.fromCallable(() -> new OkHttpAzureHttpResponse(request, call.execute()));
+            } catch (IOException e) {
+                return Mono.error(e);
+            }
+        });
+    }
+}
+
+
+package com.sample;
+
+import com.azure.core.http.HttpHeaders;
+import com.azure.core.http.HttpRequest;
+import com.azure.core.http.HttpResponse;
+import okhttp3.Response;
+import okio.BufferedSource;
+import reactor.core.publisher.Flux;
+
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+public class OkHttpAzureHttpResponse extends HttpResponse {
+
+    private final Response response;
+
+    public OkHttpAzureHttpResponse(HttpRequest request, Response response) {
+        super(request);
+        this.response = response;
+    }
+
+    @Override
+    public int getStatusCode() {
+        return response.code();
+    }
+
+    @Override
+    public String getHeaderValue(String name) {
+        return response.header(name);
+    }
+
+    @Override
+    public HttpHeaders getHeaders() {
+        HttpHeaders headers = new HttpHeaders();
+        for (Map.Entry<String, List<String>> entry : response.headers().toMultimap().entrySet()) {
+            entry.getValue().forEach(value -> headers.set(entry.getKey(), value));
+        }
+        return headers;
+    }
+
+    @Override
+    public Flux<ByteBuffer> getBody() {
+        BufferedSource source = response.body().source();
+        return Flux.generate(sink -> {
+            try {
+                if (!source.exhausted()) {
+                    byte[] bytes = source.readByteArray();
+                    sink.next(ByteBuffer.wrap(bytes));
+                } else {
+                    sink.complete();
+                }
+            } catch (IOException e) {
+                sink.error(e);
+            }
+        });
+    }
+
+    @Override
+    public void close() {
+        response.close();
+    }
+}
+@Bean
+public HttpClient okHttpClient(AzureOpenaiClientProperties properties) {
+    OkHttpClient client = new OkHttpClient.Builder()
+            .connectTimeout(properties.getConnectTimeout())
+            .callTimeout(properties.getCallTimeout())
+            .build();
+
+    return new OkHttpAzureHttpClient(client);
+}
