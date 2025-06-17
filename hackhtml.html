@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>News Feed</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    let newsData = [];
+    let sortBy = 'potential_impact';
+    let sortDirection = 'desc';
+
+    async function fetchNews() {
+      try {
+        const response = await fetch('/your-api-endpoint'); // Replace with actual endpoint
+        const data = await response.json();
+        newsData = data;
+        renderNews();
+      } catch (err) {
+        console.error('Error fetching news:', err);
+      }
+    }
+
+    function renderNews() {
+      const tableBody = document.getElementById('news-table-body');
+      tableBody.innerHTML = '';
+
+      const sortedNews = [...newsData].sort((a, b) => {
+        const valA = a[sortBy]?.toString().toLowerCase();
+        const valB = b[sortBy]?.toString().toLowerCase();
+        if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
+        if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
+        return 0;
+      });
+
+      sortedNews.forEach(item => {
+        const row = document.createElement('tr');
+        row.className = 'border-b hover:bg-gray-50';
+
+        row.innerHTML = `
+          <td class="p-2 text-sm font-medium text-gray-800">${item.id}</td>
+          <td class="p-2 text-sm text-blue-600 hover:underline"><a href="${item.link}" target="_blank">${item.title}</a></td>
+          <td class="p-2 text-sm text-gray-600">${new Date(item.published_date).toLocaleString()}</td>
+          <td class="p-2 text-sm text-gray-700">${item.summary}</td>
+          <td class="p-2 text-sm">
+            <span class="inline-block px-2 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800">${item.risk_theme}</span>
+          </td>
+          <td class="p-2 text-sm">
+            <span class="inline-block px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">${item.news_source}</span>
+          </td>
+          <td class="p-2 text-sm">
+            <span class="inline-block px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">${item.potential_impact}</span>
+          </td>
+        `;
+
+        tableBody.appendChild(row);
+      });
+    }
+
+    function setSort(field) {
+      if (sortBy === field) {
+        sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+      } else {
+        sortBy = field;
+        sortDirection = 'asc';
+      }
+      renderNews();
+    }
+
+    setInterval(fetchNews, 60000); // Fetch every 60 seconds
+    window.onload = fetchNews;
+  </script>
+</head>
+
+<body class="bg-gray-100 text-gray-900">
+  <div class="max-w-7xl mx-auto py-10 px-4">
+    <h1 class="text-3xl font-bold mb-6">Live Risk News Feed</h1>
+    <div class="overflow-x-auto bg-white shadow rounded-lg">
+      <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+            <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase">Title</th>
+            <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase">Published Date</th>
+            <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase">Summary</th>
+            <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer" onclick="setSort('risk_theme')">Risk Theme</th>
+            <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase">Source</th>
+            <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer" onclick="setSort('potential_impact')">Impact</th>
+          </tr>
+        </thead>
+        <tbody id="news-table-body" class="bg-white divide-y divide-gray-100"></tbody>
+      </table>
+    </div>
+  </div>
+</body>
+
+</html>
