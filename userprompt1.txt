@@ -1,0 +1,3 @@
+Please analyze this news article for potential risks to an international bank:
+https://example.com/news/article123
+Focus on negative developments only. Summarize the key risks, themes, impact, and priority.
