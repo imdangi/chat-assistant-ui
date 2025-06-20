@@ -1,0 +1,18 @@
+// Step 2: Parse and extract readable content using Jsoup
+            Document doc = Jsoup.parse(html);
+            doc.select("script, style, nav, header, footer, aside, ads, iframe").remove(); // cleanup
+
+            // Step 3: Try to get the <article> tag or main content
+            Element article = doc.selectFirst("article");
+            if (article != null) {
+                return article.text();
+            }
+
+            // Fallback: Try to get largest <div> block with paragraphs
+            Elements paragraphs = doc.select("p");
+            StringBuilder content = new StringBuilder();
+            for (Element p : paragraphs) {
+                content.append(p.text()).append("\n");
+            }
+
+            return content.toString().trim();
