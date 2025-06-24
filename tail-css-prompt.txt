@@ -1,0 +1,6 @@
+"Use Tailwind CSS to create a professional and visually appealing UI suitable for financial business applications. Apply colors that reflect trust, clarity, and professionalism — such as muted blues, grays, soft greens, and deep navy tones. Avoid overly bright, neon, or playful colors. Use subtle contrast, card-style layout, clean typography, and modern spacing. The UI should be colorful but within the boundaries of what’s acceptable in a finance-related environment like banking or trading apps."
+
+
+Avoid: bg-pink-400, bg-yellow-300, text-purple-500, etc.
+
+“Use a modern, clean financial dashboard layout with Tailwind CSS. Use components like cards, sections, badges, and alert boxes. Visual tone should match applications used by investment banks, hedge funds, or risk departments — serious, clean, and confident.”
