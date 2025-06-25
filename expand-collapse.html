@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Responsive Expandable Table</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .expandable-content {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease;
+    }
+    .expandable-content.expanded {
+      max-height: 500px;
+    }
+  </style>
+</head>
+<body class="bg-gray-50 p-4">
+
+  <div class="overflow-x-auto">
+    <div class="min-w-[600px] bg-white rounded shadow-md">
+      <table class="w-full divide-y divide-gray-200" id="dashboardTable">
+        <thead class="bg-gray-100">
+          <tr>
+            <th class="px-4 py-2 text-left text-sm font-medium text-gray-700">ID</th>
+            <th class="px-4 py-2 text-left text-sm font-medium text-gray-700">Name</th>
+            <th class="px-4 py-2 text-left text-sm font-medium text-gray-700">Status</th>
+            <th class="px-4 py-2 text-sm font-medium text-gray-700 text-right">Action</th>
+          </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+          <tr class="data-row cursor-pointer hover:bg-blue-50 transition" data-id="101">
+            <td class="px-4 py-2 text-sm text-gray-800">101</td>
+            <td class="px-4 py-2 text-sm text-gray-800">Quarterly Report</td>
+            <td class="px-4 py-2 text-sm text-green-600 font-medium">Pending</td>
+            <td class="px-4 py-2 text-sm text-gray-600 text-right">
+              <svg class="toggle-icon w-5 h-5 inline-block transform transition-transform duration-200 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+              </svg>
+            </td>
+          </tr>
+          <tr class="data-row cursor-pointer hover:bg-blue-50 transition" data-id="102">
+            <td class="px-4 py-2 text-sm text-gray-800">102</td>
+            <td class="px-4 py-2 text-sm text-gray-800">Compliance Review</td>
+            <td class="px-4 py-2 text-sm text-yellow-600 font-medium">In Progress</td>
+            <td class="px-4 py-2 text-sm text-gray-600 text-right">
+              <svg class="toggle-icon w-5 h-5 inline-block transform transition-transform duration-200 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+              </svg>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      const table = document.getElementById("dashboardTable");
+
+      table.addEventListener("click", async function (e) {
+        const row = e.target.closest(".data-row");
+        if (!row) return;
+
+        const icon = row.querySelector(".toggle-icon");
+
+        // Collapse existing expanded row
+        const existing = table.querySelector(".expanded-row");
+        const openIcon = table.querySelector(".toggle-icon.rotate-90");
+        if (existing) existing.remove();
+        if (openIcon) openIcon.classList.remove("rotate-90");
+
+        // If clicked same row again, collapse
+        if (existing && existing.previousElementSibling === row) return;
+
+        const id = row.dataset.id;
+
+        // Create expandable row
+        const expandRow = document.createElement("tr");
+        expandRow.classList.add("expanded-row");
+        expandRow.innerHTML = `
+          <td colspan="4" class="px-4 pt-2 pb-4 bg-gray-50 text-sm text-gray-800">
+            <div class="expandable-content rounded-md border border-blue-100 p-4 bg-blue-50 text-blue-900 flex items-center gap-3">
+              <svg class="w-5 h-5 animate-spin text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 00-8 8h4z"/>
+              </svg>
+              Loading details for ID ${id}...
+            </div>
+          </td>
+        `;
+        row.after(expandRow);
+
+        // Animate expand
+        setTimeout(() => {
+          const content = expandRow.querySelector(".expandable-content");
+          content.classList.add("expanded");
+        }, 50);
+
+        if (icon) icon.classList.add("rotate-90");
+
+        try {
+          const response = await fetch('/api/details', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id })
+          });
+
+          const html = await response.text();
+
+          const contentDiv = expandRow.querySelector(".expandable-content");
+          contentDiv.innerHTML = html;
+
+          // Auto-scroll into view
+          expandRow.scrollIntoView({ behavior: "smooth", block: "center" });
+
+        } catch (err) {
+          const contentDiv = expandRow.querySelector(".expandable-content");
+          contentDiv.innerHTML = `<div class="text-red-600">Error loading details for ID ${id}</div>`;
+        }
+      });
+    });
+  </script>
+
+</body>
+</html>
