@@ -1,0 +1,41 @@
+private static void copyGrouping(Sheet oldSheet, XSSFSheet newSheet) {
+    // Copy row outline levels and hidden states
+    for (int i = 0; i <= oldSheet.getLastRowNum(); i++) {
+        Row oldRow = oldSheet.getRow(i);
+        if (oldRow != null) {
+            XSSFRow newRow = newSheet.getRow(i);
+            if (newRow == null) newRow = newSheet.createRow(i);
+            newRow.setOutlineLevel(oldRow.getOutlineLevel());
+            newRow.setZeroHeight(oldRow.getZeroHeight());
+        }
+    }
+
+    // Copy row collapsed states
+    for (int i = 0; i <= oldSheet.getLastRowNum(); i++) {
+        Row oldRow = oldSheet.getRow(i);
+        if (oldRow != null && oldRow.getZeroHeight()) {
+            try {
+                newSheet.setRowGroupCollapsed(i, true);
+            } catch (Exception ignored) {}
+        }
+    }
+
+    // Copy column grouping info
+    int maxCols = 0;
+    for (int i = 0; i <= oldSheet.getLastRowNum(); i++) {
+        Row row = oldSheet.getRow(i);
+        if (row != null) maxCols = Math.max(maxCols, row.getLastCellNum());
+    }
+
+    for (int col = 0; col < maxCols; col++) {
+        newSheet.setColumnHidden(col, oldSheet.isColumnHidden(col));
+        try {
+            newSheet.setColumnOutlineLevel(col, oldSheet.getColumnOutlineLevel(col));
+            newSheet.setColumnGroupCollapsed(col, oldSheet.isColumnGroupCollapsed(col));
+        } catch (Exception ignored) {}
+    }
+
+    // Display outline buttons properly
+    newSheet.setRowSumsBelow(oldSheet.getRowSumsBelow());
+    newSheet.setRowSumsRight(oldSheet.getRowSumsRight());
+}
