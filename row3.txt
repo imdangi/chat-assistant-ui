@@ -1,0 +1,162 @@
+/**
+ * Copy row/column grouping (outline) from oldSheet -> newSheet.
+ * - Recreates nested row groups by grouping from highest outline level down.
+ * - Attempts to recreate column groups when oldSheet is XSSFSheet.
+ *
+ * Limitations:
+ * - HSSF (.xls) does not reliably expose column outline levels, so column grouping
+ *   may not be reconstructable when source is HSSF. Row outline levels are readable.
+ */
+private static void copyGrouping(Sheet oldSheet, Sheet newSheet) {
+    if (oldSheet == null || newSheet == null) return;
+
+    // Preserve outline display settings
+    try {
+        newSheet.setRowSumsBelow(oldSheet.getRowSumsBelow());
+        newSheet.setRowSumsRight(oldSheet.getRowSumsRight());
+    } catch (Exception ignored) {}
+
+    // -------- Rows: Compute outline levels per row and max level --------
+    final int lastRow = oldSheet.getLastRowNum();
+    int maxRowOutline = 0;
+    short[] rowLevels = new short[lastRow + 1]; // default 0
+
+    for (int r = 0; r <= lastRow; r++) {
+        Row oldRow = oldSheet.getRow(r);
+        short lvl = 0;
+        if (oldRow != null) {
+            try {
+                lvl = oldRow.getOutlineLevel(); // available on Row
+            } catch (Exception ignored) { lvl = 0; }
+        }
+        rowLevels[r] = lvl;
+        if (lvl > maxRowOutline) maxRowOutline = lvl;
+    }
+
+    // -------- Group rows from highest level downwards to reconstruct nested groups --------
+    for (int level = maxRowOutline; level >= 1; level--) {
+        int start = -1;
+        for (int r = 0; r <= lastRow; r++) {
+            boolean atLevelOrDeeper = rowLevels[r] >= level;
+            if (atLevelOrDeeper) {
+                if (start == -1) start = r;
+            } else {
+                if (start != -1) {
+                    // group from start..r-1 at this level
+                    try {
+                        newSheet.groupRow(start, r - 1);
+                        // If any row in the grouped range is hidden, mark the group collapsed
+                        boolean collapse = false;
+                        for (int rr = start; rr <= r - 1; rr++) {
+                            Row oldRow = oldSheet.getRow(rr);
+                            if (oldRow != null && oldRow.getZeroHeight()) { collapse = true; break; }
+                        }
+                        if (collapse) {
+                            try { newSheet.setRowGroupCollapsed(start, true); } catch (Exception ignored) {}
+                        }
+                    } catch (Exception ignored) {}
+                    start = -1;
+                }
+            }
+        }
+        // close trailing group if present
+        if (start != -1) {
+            try {
+                newSheet.groupRow(start, lastRow);
+                boolean collapse = false;
+                for (int rr = start; rr <= lastRow; rr++) {
+                    Row oldRow = oldSheet.getRow(rr);
+                    if (oldRow != null && oldRow.getZeroHeight()) { collapse = true; break; }
+                }
+                if (collapse) {
+                    try { newSheet.setRowGroupCollapsed(start, true); } catch (Exception ignored) {}
+                }
+            } catch (Exception ignored) {}
+        }
+    }
+
+    // Also copy per-row hidden/zero-height for exact match
+    for (int r = 0; r <= lastRow; r++) {
+        Row oldRow = oldSheet.getRow(r);
+        if (oldRow != null) {
+            try {
+                Row newRow = newSheet.getRow(r);
+                if (newRow == null) newRow = newSheet.createRow(r);
+                newRow.setZeroHeight(oldRow.getZeroHeight());
+            } catch (Exception ignored) {}
+        }
+    }
+
+    // -------- Columns: attempt to copy grouping if possible (XSSF only) --------
+    // Compute max columns present
+    int maxCols = 0;
+    for (int r = 0; r <= lastRow; r++) {
+        Row row = oldSheet.getRow(r);
+        if (row != null) {
+            int lastCell = row.getLastCellNum(); // may be -1 if row empty
+            if (lastCell > maxCols) maxCols = lastCell;
+        }
+    }
+
+    // Copy simple hidden flags for columns
+    for (int c = 0; c < maxCols; c++) {
+        try {
+            boolean hidden = oldSheet.isColumnHidden(c);
+            newSheet.setColumnHidden(c, hidden);
+        } catch (Exception ignored) {}
+    }
+
+    // If source/target are both XSSF, we can use getColumnOutlineLevel()
+    if (oldSheet instanceof org.apache.poi.xssf.usermodel.XSSFSheet && newSheet instanceof org.apache.poi.xssf.usermodel.XSSFSheet) {
+        org.apache.poi.xssf.usermodel.XSSFSheet xsOld = (org.apache.poi.xssf.usermodel.XSSFSheet) oldSheet;
+        org.apache.poi.xssf.usermodel.XSSFSheet xsNew = (org.apache.poi.xssf.usermodel.XSSFSheet) newSheet;
+
+        // compute outline level per column and max
+        int[] colLevels = new int[maxCols];
+        int maxColLevel = 0;
+        for (int c = 0; c < maxCols; c++) {
+            int lvl = 0;
+            try { lvl = xsOld.getColumnOutlineLevel(c); } catch (Exception ignored) { lvl = 0; }
+            colLevels[c] = lvl;
+            if (lvl > maxColLevel) maxColLevel = lvl;
+        }
+
+        // group columns from highest level down
+        for (int level = maxColLevel; level >= 1; level--) {
+            int start = -1;
+            for (int c = 0; c < maxCols; c++) {
+                boolean atOrDeeper = colLevels[c] >= level;
+                if (atOrDeeper) {
+                    if (start == -1) start = c;
+                } else {
+                    if (start != -1) {
+                        try {
+                            xsNew.groupColumn(start, c - 1);
+                            // infer collapse from hidden columns inside the range
+                            boolean collapse = false;
+                            for (int cc = start; cc <= c - 1; cc++) {
+                                if (xsOld.isColumnHidden(cc)) { collapse = true; break; }
+                            }
+                            if (collapse) {
+                                try { xsNew.setColumnGroupCollapsed(start, true); } catch (Exception ignored) {}
+                            }
+                        } catch (Exception ignored) {}
+                        start = -1;
+                    }
+                }
+            }
+            if (start != -1) {
+                try {
+                    xsNew.groupColumn(start, maxCols - 1);
+                    boolean collapse = false;
+                    for (int cc = start; cc <= maxCols - 1; cc++) {
+                        if (xsOld.isColumnHidden(cc)) { collapse = true; break; }
+                    }
+                    if (collapse) {
+                        try { xsNew.setColumnGroupCollapsed(start, true); } catch (Exception ignored) {}
+                    }
+                } catch (Exception ignored) {}
+            }
+        }
+    } // else: cannot reliably copy column outline levels from HSSF; we already copied hidden flags
+}
