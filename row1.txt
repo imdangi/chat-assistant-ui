@@ -1,0 +1,68 @@
+private static void copyGrouping(Sheet oldSheet, Sheet newSheet) {
+    if (oldSheet == null || newSheet == null) return;
+
+    // Preserve outline direction
+    try {
+        newSheet.setRowSumsBelow(oldSheet.getRowSumsBelow());
+        newSheet.setRowSumsRight(oldSheet.getRowSumsRight());
+    } catch (Exception ignored) {}
+
+    // --- Handle grouped rows ---
+    // Find sequences of grouped rows (same outline level)
+    short lastLevel = -1;
+    int groupStart = -1;
+    for (int i = 0; i <= oldSheet.getLastRowNum(); i++) {
+        Row oldRow = oldSheet.getRow(i);
+        if (oldRow == null) continue;
+
+        short level = oldRow.getOutlineLevel();
+        if (level != lastLevel) {
+            // Close previous group
+            if (groupStart >= 0 && lastLevel > 0) {
+                try {
+                    newSheet.groupRow(groupStart, i - 1);
+                } catch (Exception ignored) {}
+            }
+            groupStart = (level > 0) ? i : -1;
+            lastLevel = level;
+        }
+    }
+    // Close last group
+    if (groupStart >= 0 && lastLevel > 0) {
+        try {
+            newSheet.groupRow(groupStart, oldSheet.getLastRowNum());
+        } catch (Exception ignored) {}
+    }
+
+    // --- Copy collapsed state ---
+    for (int i = 0; i <= oldSheet.getLastRowNum(); i++) {
+        try {
+            Row row = oldSheet.getRow(i);
+            if (row != null && row.getZeroHeight()) {
+                newSheet.setRowGroupCollapsed(i, true);
+            }
+        } catch (Exception ignored) {}
+    }
+
+    // --- Copy hidden columns and grouping ---
+    int maxCols = 0;
+    for (int i = 0; i <= oldSheet.getLastRowNum(); i++) {
+        Row row = oldSheet.getRow(i);
+        if (row != null && row.getLastCellNum() > maxCols)
+            maxCols = row.getLastCellNum();
+    }
+
+    for (int col = 0; col < maxCols; col++) {
+        try {
+            newSheet.setColumnHidden(col, oldSheet.isColumnHidden(col));
+            if (oldSheet instanceof XSSFSheet os && newSheet instanceof XSSFSheet ns) {
+                if (os.getColumnOutlineLevel(col) > 0) {
+                    ns.groupColumn(col, col);
+                    if (os.isColumnGroupCollapsed(col)) {
+                        ns.setColumnGroupCollapsed(col, true);
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+    }
+}
